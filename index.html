@@ -380,7 +380,7 @@
   }
   .counter-total { font-size: 1.05rem; color: var(--gray-400); font-weight: 600; }
 
-  /* ── Counter Button (redesigned) ── */
+  /* ── Counter Button ── */
   .counter-btn {
     width: 100%; height: 62px; border: none; border-radius: var(--radius-sm);
     background: linear-gradient(145deg, var(--emerald-500), var(--emerald-700));
@@ -399,6 +399,70 @@
   }
   .counter-btn:hover { transform: translateY(-2px); box-shadow: 0 8px 28px rgba(4, 120, 87, 0.35); }
   .counter-btn:active { transform: translateY(0) scale(0.97); box-shadow: 0 2px 12px rgba(4, 120, 87, 0.2); }
+
+  /* ── NEW: Skip / Complete Section Button ── */
+  .skip-complete-btn {
+    width: 100%; height: 46px; border: 2px solid var(--emerald-400);
+    border-radius: var(--radius-sm); background: rgba(255,255,255,0.92);
+    color: var(--emerald-700); font-family: 'Plus Jakarta Sans', sans-serif;
+    font-size: 0.84rem; font-weight: 700; cursor: pointer; transition: var(--transition);
+    margin-top: 8px; display: flex; align-items: center; justify-content: center; gap: 7px;
+  }
+  .skip-complete-btn:hover { background: var(--emerald-50); border-color: var(--emerald-600); color: var(--emerald-800); }
+  .skip-complete-btn:active { transform: scale(0.98); }
+
+  /* ── NEW: Quick Complete link on Home ── */
+  .quick-complete-row {
+    display: flex; align-items: center; justify-content: center; margin-top: 8px;
+  }
+  .quick-complete-link {
+    display: inline-flex; align-items: center; gap: 5px;
+    background: none; border: none; cursor: pointer;
+    font-family: 'Plus Jakarta Sans', sans-serif; font-size: 0.76rem; font-weight: 700;
+    color: var(--emerald-600); text-decoration: underline; text-underline-offset: 2px;
+    padding: 4px 8px; transition: var(--transition); border-radius: 6px;
+  }
+  .quick-complete-link:hover { color: var(--emerald-800); background: var(--emerald-50); }
+
+  /* ── NEW: Voice Recorder ── */
+  .vr-container {
+    margin-top: 12px; border: 1.5px solid var(--emerald-200);
+    border-radius: var(--radius-sm); overflow: hidden;
+    background: rgba(236, 253, 245, 0.35);
+  }
+  .vr-toggle {
+    width: 100%; display: flex; align-items: center; justify-content: space-between;
+    padding: 10px 14px; background: none; border: none; cursor: pointer;
+    font-family: 'Plus Jakarta Sans', sans-serif;
+  }
+  .vr-toggle-label {
+    font-size: 0.79rem; font-weight: 700; color: var(--emerald-700);
+    display: flex; align-items: center; gap: 6px;
+  }
+  .vr-toggle-arrow { font-size: 0.78rem; color: var(--emerald-500); transition: var(--transition); font-weight: 700; }
+  .vr-body-inner { padding: 10px 14px 14px; border-top: 1px solid var(--emerald-200); }
+  .vr-hint { font-size: 0.73rem; color: var(--gray-500); margin-bottom: 10px; font-weight: 500; line-height: 1.4; }
+  .vr-record-btn {
+    display: inline-flex; align-items: center; gap: 7px; height: 40px; padding: 0 16px;
+    border-radius: 10px; border: 2px solid #fca5a5; background: #fff1f2; color: #dc2626;
+    font-family: 'Plus Jakarta Sans', sans-serif; font-size: 0.79rem; font-weight: 700;
+    cursor: pointer; transition: var(--transition);
+  }
+  .vr-record-btn:hover { background: #fee2e2; border-color: #f87171; }
+  .vr-record-btn.recording { background: #dc2626; color: white; border-color: #dc2626; }
+  .vr-audio-player {
+    width: 100%; height: 38px; border-radius: 8px; margin-top: 4px; display: block;
+  }
+  .vr-status {
+    display: flex; align-items: center; gap: 6px; font-size: 0.75rem;
+    font-weight: 700; color: #dc2626; margin-bottom: 8px;
+  }
+  .vr-dot {
+    width: 8px; height: 8px; background: #dc2626; border-radius: 50%;
+    animation: pulsered 1s ease infinite; flex-shrink: 0;
+  }
+  .vr-rerecord-row { margin-top: 8px; }
+  @keyframes pulsered { 0%,100%{opacity:1;} 50%{opacity:0.3;} }
 
   .progress-bar-container {
     width: 100%; height: 8px; background: var(--emerald-100);
@@ -683,12 +747,206 @@ function updateStreak(){const t=todayStr();if(data.streak.lastActiveDate===t)ret
 function getNextUnmemorizedPage(){for(let i=1;i<=604;i++)if(!data.completedPages[i])return i;return null;}
 function getCompletedCount(){return Object.keys(data.completedPages).length;}
 
-function initNav(){document.querySelectorAll('.nav-item').forEach(b=>{b.addEventListener('click',()=>{if(app.memScreen){if(!confirm('Leave memorization? Progress is auto-saved.'))return;autoSaveSession();}app.memScreen=false;app.currentTab=b.dataset.tab;setActiveTab(b.dataset.tab);renderTab(b.dataset.tab);});});updateReviewBadge();}
+/* ══════════════════════════════════════════════════
+   NEW: Word-count utilities
+══════════════════════════════════════════════════ */
+function countWords(text){
+  return text.trim().split(/\s+/).filter(w=>w.length>0).length;
+}
+function getTotalPageWords(){
+  if(!app.pageData)return 100;
+  return app.pageData.reduce((sum,a)=>sum+countWords(a.text),0);
+}
+
+/* ══════════════════════════════════════════════════
+   UPDATED: buildSections — word-count based thirds
+   Each "third" = totalPageWords / 3 words.
+   If a segment is ≤ 1 third: single section.
+   If segment ≤ 2 thirds: split into 2 parts.
+   Otherwise: split into 3 parts.
+   Splits are rounded to the nearest whole ayah.
+   Always appends a "Full Section" at the end.
+══════════════════════════════════════════════════ */
+function buildSections(seg, totalPageWords){
+  const ayahs=seg.ayahs, n=ayahs.length;
+  if(n===0)return[];
+  if(n===1)return[{label:'Full Section',ayahs:[...ayahs],type:'whole'}];
+
+  // cumulative word count within this segment
+  const wc=ayahs.map(a=>countWords(a.text));
+  const cum=[];let s=0;
+  for(const w of wc){s+=w;cum.push(s);}
+  const segWords=cum[cum.length-1];
+
+  const pw=totalPageWords||segWords;
+  const t1=pw/3, t2=2*pw/3;
+
+  // Segment fits within one page-third → single undivided section
+  if(segWords<=t1){
+    return[{label:'Full Section',ayahs:[...ayahs],type:'whole'}];
+  }
+
+  // Find best ayah boundary closest to first-third word mark
+  let sp1=1,best1=Infinity;
+  for(let i=0;i<n-1;i++){
+    const dev=Math.abs(cum[i]-t1);
+    if(dev<best1){best1=dev;sp1=i+1;}
+  }
+  sp1=Math.max(1,Math.min(sp1,n-1));
+
+  // If segment fits within two page-thirds → 2 sections
+  if(segWords<=t2){
+    return[
+      {label:'First Part',ayahs:ayahs.slice(0,sp1),type:'part'},
+      {label:'Second Part',ayahs:ayahs.slice(sp1),type:'part'},
+      {label:'Full Section',ayahs:[...ayahs],type:'whole'}
+    ];
+  }
+
+  // Find best ayah boundary closest to two-thirds mark (must be after sp1)
+  let sp2=sp1+1,best2=Infinity;
+  for(let i=sp1;i<n-1;i++){
+    const dev=Math.abs(cum[i]-t2);
+    if(dev<best2){best2=dev;sp2=i+1;}
+  }
+  sp2=Math.max(sp1+1,Math.min(sp2,n-1));
+
+  // Guard: if we can't cleanly get 3 distinct non-empty sections, fall back to 2
+  if(sp2<=sp1||sp2>=n){
+    return[
+      {label:'First Part',ayahs:ayahs.slice(0,sp1),type:'part'},
+      {label:'Second Part',ayahs:ayahs.slice(sp1),type:'part'},
+      {label:'Full Section',ayahs:[...ayahs],type:'whole'}
+    ];
+  }
+
+  return[
+    {label:'First Third',ayahs:ayahs.slice(0,sp1),type:'part'},
+    {label:'Second Third',ayahs:ayahs.slice(sp1,sp2),type:'part'},
+    {label:'Third Third',ayahs:ayahs.slice(sp2),type:'part'},
+    {label:'Full Section',ayahs:[...ayahs],type:'whole'}
+  ];
+}
+
+/* ══════════════════════════════════════════════════
+   NEW: Voice Recorder
+══════════════════════════════════════════════════ */
+let vrState={
+  mediaRecorder:null, audioBlob:null, audioUrl:null,
+  recording:false, chunks:[], open:false
+};
+
+function resetVR(){
+  if(vrState.mediaRecorder&&vrState.recording){
+    try{vrState.mediaRecorder.stop();}catch(e){}
+  }
+  if(vrState.audioUrl){URL.revokeObjectURL(vrState.audioUrl);}
+  vrState.audioBlob=null; vrState.audioUrl=null;
+  vrState.recording=false; vrState.chunks=[];
+  vrState.mediaRecorder=null;
+  // preserve vrState.open so collapsed state is remembered
+}
+
+function vrHtml(){
+  return`<div class="vr-container" id="vrContainer">
+    <button class="vr-toggle" id="vrToggle">
+      <span class="vr-toggle-label">🎤 Voice Recorder</span>
+      <span class="vr-toggle-arrow" id="vrArrow">${vrState.open?'▲':'▼'}</span>
+    </button>
+    <div id="vrBody" style="display:${vrState.open?'block':'none'};">
+      <div class="vr-body-inner">
+        <p class="vr-hint">Record yourself reciting to check your accuracy — play back to catch mistakes.</p>
+        <div id="vrInner">${vrInnerHtml()}</div>
+      </div>
+    </div>
+  </div>`;
+}
+
+function vrInnerHtml(){
+  if(vrState.recording){
+    return`<div class="vr-status"><div class="vr-dot"></div> Recording in progress…</div>
+    <button class="vr-record-btn recording" id="vrStopBtn">⏹ Stop Recording</button>`;
+  }
+  if(vrState.audioBlob){
+    return`<audio class="vr-audio-player" controls src="${vrState.audioUrl}"></audio>
+    <div class="vr-rerecord-row"><button class="vr-record-btn" id="vrRerecordBtn">🎤 Re-record</button></div>`;
+  }
+  return`<button class="vr-record-btn" id="vrStartBtn">🎤 Start Recording</button>`;
+}
+
+function setupVR(){
+  const toggle=document.getElementById('vrToggle');
+  if(toggle){
+    toggle.onclick=()=>{
+      vrState.open=!vrState.open;
+      const body=document.getElementById('vrBody');
+      const arrow=document.getElementById('vrArrow');
+      if(body)body.style.display=vrState.open?'block':'none';
+      if(arrow)arrow.textContent=vrState.open?'▲':'▼';
+    };
+  }
+  bindVRButtons();
+}
+
+function bindVRButtons(){
+  const startBtn=document.getElementById('vrStartBtn');
+  const stopBtn=document.getElementById('vrStopBtn');
+  const rerecBtn=document.getElementById('vrRerecordBtn');
+  if(startBtn)startBtn.onclick=startVRRecording;
+  if(stopBtn)stopBtn.onclick=stopVRRecording;
+  if(rerecBtn)rerecBtn.onclick=()=>{
+    if(vrState.audioUrl)URL.revokeObjectURL(vrState.audioUrl);
+    vrState.audioBlob=null; vrState.audioUrl=null; vrState.chunks=[];
+    refreshVRInner();
+  };
+}
+
+function refreshVRInner(){
+  const inner=document.getElementById('vrInner');
+  if(inner){inner.innerHTML=vrInnerHtml();bindVRButtons();}
+}
+
+async function startVRRecording(){
+  try{
+    const stream=await navigator.mediaDevices.getUserMedia({audio:true});
+    vrState.chunks=[];
+    const mr=new MediaRecorder(stream);
+    vrState.mediaRecorder=mr;
+    mr.ondataavailable=e=>{if(e.data.size>0)vrState.chunks.push(e.data);};
+    mr.onstop=()=>{
+      const blob=new Blob(vrState.chunks,{type:'audio/webm'});
+      vrState.audioBlob=blob;
+      vrState.audioUrl=URL.createObjectURL(blob);
+      vrState.recording=false;
+      stream.getTracks().forEach(t=>t.stop());
+      refreshVRInner();
+    };
+    mr.start();
+    vrState.recording=true;
+    refreshVRInner();
+  }catch(e){
+    alert('Could not access microphone. Please allow microphone permissions and try again.');
+  }
+}
+
+function stopVRRecording(){
+  if(vrState.mediaRecorder&&vrState.recording){
+    vrState.mediaRecorder.stop();
+  }
+}
+
+/* ══════════════════════════════════════════════════
+   Navigation
+══════════════════════════════════════════════════ */
+function initNav(){document.querySelectorAll('.nav-item').forEach(b=>{b.addEventListener('click',()=>{if(app.memScreen){if(!confirm('Leave memorization? Progress is auto-saved.'))return;autoSaveSession();}app.memScreen=false;resetVR();app.currentTab=b.dataset.tab;setActiveTab(b.dataset.tab);renderTab(b.dataset.tab);});});updateReviewBadge();}
 function setActiveTab(t){document.querySelectorAll('.nav-item').forEach(b=>b.classList.toggle('active',b.dataset.tab===t));}
 function updateReviewBadge(){const d=getDueReviews().length;const b=$('#reviewBadge');if(d>0){b.classList.remove('hidden');b.textContent=d>9?'9+':d;}else b.classList.add('hidden');}
 function showBottomNav(s){$('#bottomNav').style.display=s?'flex':'none';}
 function renderTab(t){showBottomNav(true);switch(t){case'home':renderHome();break;case'review':renderReview();break;case'progress':renderProgress();break;case'settings':renderSettings();break;}}
 
+/* ══════════════════════════════════════════════════
+   Fetch helpers
+══════════════════════════════════════════════════ */
 async function fetchPage(pn){
   const tr=await fetch(`${API_BASE}/page/${pn}/quran-uthmani`);const td=await tr.json();
   if(td.code!==200)throw new Error('Not found');
@@ -696,12 +954,17 @@ async function fetchPage(pn){
   return td.data.ayahs.map((a,i)=>({number:a.number,numberInSurah:a.numberInSurah,surahNumber:a.surah.number,surahName:a.surah.englishName,surahNameAr:a.surah.name,text:a.text,audio:ad.data.ayahs[i]?.audio||''}));
 }
 function buildSurahSegments(ay){const s=[];let c=null;for(const a of ay){if(!c||c.surahNumber!==a.surahNumber){if(c)s.push(c);c={surahNumber:a.surahNumber,surahName:a.surahName,surahNameAr:a.surahNameAr,ayahs:[],audioUrls:[]};}c.ayahs.push(a);c.audioUrls.push(a.audio);}if(c)s.push(c);return s;}
-function buildSections(seg){const a=seg.ayahs,t=a.length;if(t<=2)return[{label:`Full — ${seg.surahName}`,ayahs:[...a],type:'whole'}];const t1=Math.ceil(t/3),t2=Math.ceil(2*t/3);return[{label:'First Third',ayahs:a.slice(0,t1),type:'third'},{label:'Second Third',ayahs:a.slice(t1,t2),type:'third'},{label:'Third Third',ayahs:a.slice(t2),type:'third'},{label:'Full Page',ayahs:[...a],type:'whole'}];}
 function renderAyahsHtml(ay){return ay.map(a=>`${a.text} <span class="ayah-number">${a.numberInSurah}</span>`).join(' ');}
 
+/* ══════════════════════════════════════════════════
+   Session persistence
+══════════════════════════════════════════════════ */
 function autoSaveSession(){if(!app.memScreen){data.savedSession=null;saveData();return;}data.savedSession={pageNumber:app.pageNumber,segmentIndex:app.currentSegmentIndex,sectionIndex:app.currentSectionIndex,repetitionCount:app.repetitionCount,sectionCompleted:app.sectionCompleted,timestamp:Date.now()};saveData();}
 function clearSavedSession(){data.savedSession=null;saveData();}
 
+/* ══════════════════════════════════════════════════
+   Home
+══════════════════════════════════════════════════ */
 function renderHome(){
   app.currentTab='home';setActiveTab('home');updateReviewBadge();
   const streak=data.streak.current,due=getDueReviews(),pw=getPagesThisWeek(),goal=data.weeklyGoal,gp=Math.min(100,Math.round(pw/goal*100)),np=getNextUnmemorizedPage(),ses=data.savedSession,cc=getCompletedCount();
@@ -710,34 +973,118 @@ function renderHome(){
   if(ses){const el=Date.now()-ses.timestamp,hr=Math.floor(el/36e5),ts=hr<1?'just now':hr<24?hr+'h ago':Math.floor(hr/24)+'d ago';h+=`<button class="quick-continue" id="resumeSession"><div class="qc-icon"><svg viewBox="0 0 24 24" fill="white"><path d="M8 5v14l11-7z"/></svg></div><div class="qc-text"><h4>Resume — Page ${ses.pageNumber}</h4><p>Section ${ses.sectionIndex+1}, Rep ${ses.repetitionCount}/50 · ${ts}</p></div><div class="qc-arrow">${ICONS.arrow}</div></button>`;}
   else if(np&&cc>0)h+=`<button class="quick-continue" id="quickContinue"><div class="qc-icon"><svg viewBox="0 0 24 24" fill="white"><path d="M10 6L8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z"/></svg></div><div class="qc-text"><h4>Continue → Page ${np}</h4><p>${cc} pages memorized</p></div><div class="qc-arrow">${ICONS.arrow}</div></button>`;
   if(due.length>0)h+=`<div class="review-banner" id="goReview"><span class="rb-icon">📋</span><div class="rb-text">${due.length} page${due.length>1?'s':''} due for review<small>Tap to start</small></div><span class="rb-arrow">›</span></div>`;
-  h+=`<div class="card"><div class="card-title"><div class="icon">📖</div> Memorize a Page</div><div class="page-selector"><input type="number" class="input-field" id="pageInput" min="1" max="604" placeholder="Page (1–604)" value="${data.lastPage||''}"><button class="btn btn-primary" id="loadPageBtn">Load</button></div><div class="error-msg" id="errorMsg"></div>${goal>0?`<div class="goal-bar"><div class="goal-header"><span>${pw}/${goal} this week</span><small>${gp}%</small></div><div class="goal-track"><div class="goal-fill" style="width:${gp}%"></div></div></div>`:''}</div>`;
+
+  h+=`<div class="card"><div class="card-title"><div class="icon">📖</div> Memorize a Page</div>
+  <div class="page-selector">
+    <input type="number" class="input-field" id="pageInput" min="1" max="604" placeholder="Page (1–604)" value="${data.lastPage||''}">
+    <button class="btn btn-primary" id="loadPageBtn">Load</button>
+  </div>
+  <div class="error-msg" id="errorMsg"></div>
+  <div class="quick-complete-row">
+    <button class="quick-complete-link" id="quickCompleteBtn">✓ Already memorized? Mark page as complete</button>
+  </div>
+  ${goal>0?`<div class="goal-bar"><div class="goal-header"><span>${pw}/${goal} this week</span><small>${gp}%</small></div><div class="goal-track"><div class="goal-fill" style="width:${gp}%"></div></div></div>`:''}
+  </div>`;
+
   $main().innerHTML=h;
   const lb=$('#loadPageBtn'),pi=$('#pageInput'),em=$('#errorMsg');
-  const doLoad=async(po)=>{const pn=po||parseInt(pi.value);if(!pn||pn<1||pn>604){if(em){em.textContent='Enter a valid page (1–604).';em.style.display='block';}return;}if(em)em.style.display='none';app.pageNumber=pn;data.lastPage=pn;saveData();if(lb){lb.disabled=true;lb.textContent='Loading…';}try{const ay=await fetchPage(pn);app.pageData=ay;app.surahSegments=buildSurahSegments(ay);app.currentSegmentIndex=0;app.checkTranslation=false;app.listenCount=0;showBottomNav(false);if(app.surahSegments.length>1)renderSegmentPicker();else renderChecklist();}catch{if(em){em.textContent='Failed to load. Check connection.';em.style.display='block';}if(lb){lb.disabled=false;lb.textContent='Load';}}};
+
+  const doLoad=async(po)=>{
+    const pn=po||parseInt(pi.value);
+    if(!pn||pn<1||pn>604){if(em){em.textContent='Enter a valid page (1–604).';em.style.display='block';}return;}
+    if(em)em.style.display='none';
+    app.pageNumber=pn;data.lastPage=pn;saveData();
+    if(lb){lb.disabled=true;lb.textContent='Loading…';}
+    try{
+      const ay=await fetchPage(pn);
+      app.pageData=ay;app.surahSegments=buildSurahSegments(ay);app.currentSegmentIndex=0;app.checkTranslation=false;app.listenCount=0;
+      showBottomNav(false);
+      if(app.surahSegments.length>1)renderSegmentPicker();else renderChecklist();
+    }catch{
+      if(em){em.textContent='Failed to load. Check connection.';em.style.display='block';}
+      if(lb){lb.disabled=false;lb.textContent='Load';}
+    }
+  };
+
   if(lb)lb.addEventListener('click',()=>doLoad());
   if(pi)pi.addEventListener('keydown',e=>{if(e.key==='Enter')doLoad();});
   const qc=$('#quickContinue');if(qc)qc.addEventListener('click',()=>doLoad(np));
   const rs=$('#resumeSession');if(rs)rs.addEventListener('click',()=>resumeSavedSession());
   const gr=$('#goReview');if(gr)gr.addEventListener('click',()=>{app.currentTab='review';setActiveTab('review');renderReview();});
+
+  // NEW: Quick complete button
+  const qcb=$('#quickCompleteBtn');
+  if(qcb)qcb.addEventListener('click',()=>{
+    const pn=parseInt(pi.value);
+    if(!pn||pn<1||pn>604){
+      if(em){em.textContent='Enter a valid page number first.';em.style.display='block';}return;
+    }
+    if(em)em.style.display='none';
+    if(data.completedPages[pn]){
+      showOverlay('📋','Already Memorized',`Page ${pn} is already in your memorized pages.`,'OK',()=>{});
+      return;
+    }
+    markPageComplete(pn);
+    showOverlay('✅','Page Marked Complete!',`Page ${pn} has been added to your memorized pages and review schedule. Keep going! 🌟`,'Continue',()=>{renderHome();});
+  });
 }
 
-async function resumeSavedSession(){const s=data.savedSession;if(!s)return;app.pageNumber=s.pageNumber;$main().innerHTML='<div style="display:flex;flex-direction:column;align-items:center;padding:60px 0;gap:14px;"><div class="spinner"></div><span style="font-size:0.85rem;color:var(--emerald-600);font-weight:500;">Resuming…</span></div>';showBottomNav(false);try{const ay=await fetchPage(s.pageNumber);app.pageData=ay;app.surahSegments=buildSurahSegments(ay);app.currentSegmentIndex=s.segmentIndex;app.sections=buildSections(app.surahSegments[app.currentSegmentIndex]);app.currentSectionIndex=s.sectionIndex;app.repetitionCount=s.repetitionCount;app.sectionCompleted=s.sectionCompleted||app.sections.map(()=>false);app.memScreen=true;renderMemorize();}catch{clearSavedSession();showBottomNav(true);renderHome();}}
+/* ══════════════════════════════════════════════════
+   Resume session
+══════════════════════════════════════════════════ */
+async function resumeSavedSession(){
+  const s=data.savedSession;if(!s)return;
+  app.pageNumber=s.pageNumber;
+  $main().innerHTML='<div style="display:flex;flex-direction:column;align-items:center;padding:60px 0;gap:14px;"><div class="spinner"></div><span style="font-size:0.85rem;color:var(--emerald-600);font-weight:500;">Resuming…</span></div>';
+  showBottomNav(false);
+  try{
+    const ay=await fetchPage(s.pageNumber);
+    app.pageData=ay;
+    app.surahSegments=buildSurahSegments(ay);
+    app.currentSegmentIndex=s.segmentIndex;
+    app.sections=buildSections(app.surahSegments[app.currentSegmentIndex],getTotalPageWords());
+    app.currentSectionIndex=s.sectionIndex;
+    app.repetitionCount=s.repetitionCount;
+    app.sectionCompleted=s.sectionCompleted||app.sections.map(()=>false);
+    app.memScreen=true;
+    renderMemorize();
+  }catch{clearSavedSession();showBottomNav(true);renderHome();}
+}
 
+/* ══════════════════════════════════════════════════
+   Segment picker
+══════════════════════════════════════════════════ */
 function renderSegmentPicker(){
-  $main().innerHTML=`<button class="back-btn" id="backBtn">${ICONS.back} Back</button><div class="card"><div class="card-title"><div class="icon">📄</div> Page ${app.pageNumber} — Multiple Surahs</div><p style="font-size:0.82rem;color:var(--gray-500);margin-bottom:14px;line-height:1.5;">Each surah section is memorized separately.</p><div id="segmentList"></div><button class="btn btn-secondary btn-full btn-sm" id="memAllBtn" style="margin-top:10px;">Memorize All Sequentially</button></div>`;
+  $main().innerHTML=`<button class="back-btn" id="backBtn">${ICONS.back} Back</button>
+  <div class="card"><div class="card-title"><div class="icon">📄</div> Page ${app.pageNumber} — Multiple Surahs</div>
+  <p style="font-size:0.82rem;color:var(--gray-500);margin-bottom:14px;line-height:1.5;">Each surah section is memorized separately.</p>
+  <div id="segmentList"></div>
+  <button class="btn btn-secondary btn-full btn-sm" id="memAllBtn" style="margin-top:10px;">Memorize All Sequentially</button></div>`;
+
   const sl=$('#segmentList');
-  app.surahSegments.forEach((seg,i)=>{const d=document.createElement('div');d.className='surah-segment-card';d.innerHTML=`<h4>${seg.surahNameAr} — ${seg.surahName}</h4><p>${seg.ayahs.length} ayah${seg.ayahs.length>1?'s':''} (${seg.ayahs[0].numberInSurah}–${seg.ayahs[seg.ayahs.length-1].numberInSurah})</p>`;d.addEventListener('click',()=>{app.currentSegmentIndex=i;app.checkTranslation=false;app.listenCount=0;renderChecklist();});sl.appendChild(d);});
+  app.surahSegments.forEach((seg,i)=>{
+    const d=document.createElement('div');d.className='surah-segment-card';
+    d.innerHTML=`<h4>${seg.surahNameAr} — ${seg.surahName}</h4><p>${seg.ayahs.length} ayah${seg.ayahs.length>1?'s':''} (${seg.ayahs[0].numberInSurah}–${seg.ayahs[seg.ayahs.length-1].numberInSurah})</p>`;
+    d.addEventListener('click',()=>{app.currentSegmentIndex=i;app.checkTranslation=false;app.listenCount=0;renderChecklist();});
+    sl.appendChild(d);
+  });
   $('#backBtn').addEventListener('click',()=>{showBottomNav(true);renderHome();});
   $('#memAllBtn').addEventListener('click',()=>{app.currentSegmentIndex=0;app.checkTranslation=false;app.listenCount=0;renderChecklist();});
 }
 
+/* ══════════════════════════════════════════════════
+   Checklist
+══════════════════════════════════════════════════ */
 function renderChecklist(){
   showBottomNav(false);app.memScreen=false;
   const seg=app.surahSegments[app.currentSegmentIndex],multi=app.surahSegments.length>1;
-  $main().innerHTML=`<button class="back-btn" id="backBtn">${ICONS.back} ${multi?'Segments':'Back'}</button><div class="card"><div class="card-title"><div class="icon">✅</div> Pre-Memorization Checklist</div><div class="surah-header-display"><h3>${seg.surahNameAr} — ${seg.surahName}</h3><p>Ayahs ${seg.ayahs[0].numberInSurah}–${seg.ayahs[seg.ayahs.length-1].numberInSurah} · Page ${app.pageNumber}</p></div>
+  $main().innerHTML=`<button class="back-btn" id="backBtn">${ICONS.back} ${multi?'Segments':'Back'}</button>
+  <div class="card"><div class="card-title"><div class="icon">✅</div> Pre-Memorization Checklist</div>
+  <div class="surah-header-display"><h3>${seg.surahNameAr} — ${seg.surahName}</h3><p>Ayahs ${seg.ayahs[0].numberInSurah}–${seg.ayahs[seg.ayahs.length-1].numberInSurah} · Page ${app.pageNumber}</p></div>
   <div class="checklist-item ${app.checkTranslation?'completed':''}" id="trCheck"><div class="check-circle">${ICONS.check}</div><div class="check-label"><h4>Read Translation / Tafseer</h4><p>Read the meaning to aid memorization.</p></div></div>
   <div class="checklist-item ${app.listenCount>=3?'completed':''}" id="liCheck"><div class="check-circle">${ICONS.check}</div><div class="check-label"><h4>Listen to Audio (3×)</h4><p>Listen carefully before beginning.</p><div><div class="listen-counter"><div class="listen-dots">${[1,2,3].map(n=>`<div class="listen-dot ${app.listenCount>=n?'filled':''}">${n}</div>`).join('')}</div><span style="font-size:0.76rem;color:var(--gray-500);font-weight:600;">${app.listenCount}/3</span></div><div class="audio-player-mini"><button class="play-btn" id="apBtn">${ICONS.play}</button><div class="audio-info">Play recitation<small>${RECITERS.find(r=>r.id===data.reciterId)?.name||''}</small></div><button class="mark-listened-btn" id="mlBtn" ${app.listenCount>=3?'disabled style="opacity:0.4"':''}>Mark Listened</button></div></div></div></div>
   <button class="btn btn-primary btn-full" id="beginBtn" ${!(app.checkTranslation&&app.listenCount>=3)?'disabled':''} style="margin-top:14px;">Begin Memorization</button></div>`;
+
   $('#trCheck').addEventListener('click',()=>{app.checkTranslation=!app.checkTranslation;renderChecklist();});
   let aq=seg.audioUrls,ai=0,ae=new Audio(),pl=false;
   function ps(){if(ai>=aq.length){pl=false;ai=0;ub();return;}ae.src=aq[ai];ae.play().catch(()=>{});ae.onended=()=>{ai++;ps();};}
@@ -748,88 +1095,248 @@ function renderChecklist(){
   $('#backBtn').addEventListener('click',()=>{ae.pause();if(multi)renderSegmentPicker();else{showBottomNav(true);renderHome();}});
 }
 
-function startMemorization(){const seg=app.surahSegments[app.currentSegmentIndex];app.sections=buildSections(seg);app.currentSectionIndex=0;app.repetitionCount=0;app.sectionCompleted=app.sections.map(()=>false);app.memScreen=true;renderMemorize();}
-
-function renderMemorize(){
-  showBottomNav(false);app.memScreen=true;autoSaveSession();
-  const seg=app.surahSegments[app.currentSegmentIndex],sec=app.sections[app.currentSectionIndex],isW=sec.type==='whole',ts=app.sections.length,si=app.currentSectionIndex;
-  $main().innerHTML=`<button class="back-btn" id="backBtn">${ICONS.back} Checklist</button>
-  <div class="card" style="padding:14px 14px 18px;"><div class="card-title" style="margin-bottom:10px;"><div class="icon">📝</div> ${seg.surahName}</div>
-  <div class="sections-nav">${app.sections.map((s,i)=>{let c='section-tab';if(i===si)c+=' active';else if(app.sectionCompleted[i])c+=' completed';const ic=app.sectionCompleted[i]?'<svg class="check-sm" viewBox="0 0 24 24"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg>':'';return`<div class="${c}">${ic}${s.label}</div>`;}).join('')}</div>
-  <div class="stage-progress">${app.sections.map((s,i)=>{let d='stage-dot';if(i===si)d+=' active';else if(app.sectionCompleted[i])d+=' completed';const l=i<si?'stage-line completed':'stage-line';return(i>0?`<div class="${l}"></div>`:'')+`<div class="${d}"></div>`;}).join('')}</div></div>
-
-  <div class="quran-text-container">${sec.ayahs[0].numberInSurah===1&&sec.ayahs[0].surahNumber!==1&&sec.ayahs[0].surahNumber!==9?`<div class="surah-header-display"><h3>${seg.surahNameAr} — ${seg.surahName}</h3></div><div class="bismillah">بِسْمِ ٱللَّهِ ٱلرَّحْمَـٰنِ ٱلرَّحِيمِ</div>`:''}<div class="quran-text">${renderAyahsHtml(sec.ayahs)}</div></div>
-
-  <div class="card mem-tracker"><div class="mem-stage-label">${isW?'Final Review — Full Section':`Part ${si+1} of ${ts-1}`}</div><div class="mem-section-label">${sec.label}</div>
-  <div class="counter-display"><span class="counter-number" id="cNum">${app.repetitionCount}</span><span class="counter-total">/ ${app.targetReps}</span></div>
-  <div class="progress-bar-container"><div class="progress-bar-fill" id="pBar" style="width:${app.repetitionCount/app.targetReps*100}%"></div></div>
-  <div class="progress-info"><span id="pD">${app.repetitionCount} repetitions</span><span id="pL">${app.targetReps-app.repetitionCount} remaining</span></div>
-  <button class="counter-btn" id="repBtn">I've Read It — Tap to Count</button>
-  <div class="audio-player-mini" style="margin-top:14px;"><button class="play-btn" id="saBtn">${ICONS.play}</button><div class="audio-info">Play this section<small>Listen while memorizing</small></div></div>
-  <div class="reset-row"><button class="reset-btn" id="rcBtn">Reset Counter</button></div></div>`;
-
-  $('#repBtn').addEventListener('click',()=>{app.repetitionCount++;const c=$('#cNum'),b=$('#pBar'),d=$('#pD'),l=$('#pL');if(c){c.textContent=app.repetitionCount;c.classList.add('pulse');setTimeout(()=>c.classList.remove('pulse'),300);}if(b)b.style.width=app.repetitionCount/app.targetReps*100+'%';if(d)d.textContent=app.repetitionCount+' repetitions';if(l)l.textContent=Math.max(0,app.targetReps-app.repetitionCount)+' remaining';autoSaveSession();if(app.repetitionCount>=app.targetReps)handleSectionComplete();});
-
-  let sq=sec.ayahs.map(a=>a.audio),si2=0,sa=new Audio(),sp=false;
-  function psa(){if(si2>=sq.length){sp=false;si2=0;const b=$('#saBtn');if(b)b.innerHTML=ICONS.play;return;}sa.src=sq[si2];sa.play().catch(()=>{});sa.onended=()=>{si2++;psa();};}
-  $('#saBtn').addEventListener('click',()=>{if(sp){sa.pause();sp=false;const b=$('#saBtn');if(b)b.innerHTML=ICONS.play;}else{sp=true;const b=$('#saBtn');if(b)b.innerHTML=ICONS.pause;psa();}});
-  $('#rcBtn').addEventListener('click',()=>{if(confirm('Reset counter?')){app.repetitionCount=0;autoSaveSession();renderMemorize();}});
-  $('#backBtn').addEventListener('click',()=>{sa.pause();autoSaveSession();app.memScreen=false;renderChecklist();});
+/* ══════════════════════════════════════════════════
+   Start memorization
+══════════════════════════════════════════════════ */
+function startMemorization(){
+  const seg=app.surahSegments[app.currentSegmentIndex];
+  app.sections=buildSections(seg,getTotalPageWords());
+  app.currentSectionIndex=0;app.repetitionCount=0;
+  app.sectionCompleted=app.sections.map(()=>false);
+  app.memScreen=true;
+  renderMemorize();
 }
 
+/* ══════════════════════════════════════════════════
+   Memorize screen (updated with skip + voice recorder)
+══════════════════════════════════════════════════ */
+function renderMemorize(){
+  showBottomNav(false);app.memScreen=true;autoSaveSession();
+  const seg=app.surahSegments[app.currentSegmentIndex],sec=app.sections[app.currentSectionIndex];
+  const isW=sec.type==='whole',ts=app.sections.length,si=app.currentSectionIndex;
+
+  $main().innerHTML=`<button class="back-btn" id="backBtn">${ICONS.back} Checklist</button>
+  <div class="card" style="padding:14px 14px 18px;">
+    <div class="card-title" style="margin-bottom:10px;"><div class="icon">📝</div> ${seg.surahName}</div>
+    <div class="sections-nav">${app.sections.map((s,i)=>{
+      let c='section-tab';
+      if(i===si)c+=' active';else if(app.sectionCompleted[i])c+=' completed';
+      const ic=app.sectionCompleted[i]?'<svg class="check-sm" viewBox="0 0 24 24"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg>':'';
+      return`<div class="${c}">${ic}${s.label}</div>`;
+    }).join('')}</div>
+    <div class="stage-progress">${app.sections.map((s,i)=>{
+      let d='stage-dot';
+      if(i===si)d+=' active';else if(app.sectionCompleted[i])d+=' completed';
+      const l=i<si?'stage-line completed':'stage-line';
+      return(i>0?`<div class="${l}"></div>`:'')+`<div class="${d}"></div>`;
+    }).join('')}</div>
+  </div>
+
+  <div class="quran-text-container">
+    ${sec.ayahs[0].numberInSurah===1&&sec.ayahs[0].surahNumber!==1&&sec.ayahs[0].surahNumber!==9
+      ?`<div class="surah-header-display"><h3>${seg.surahNameAr} — ${seg.surahName}</h3></div><div class="bismillah">بِسْمِ ٱللَّهِ ٱلرَّحْمَـٰنِ ٱلرَّحِيمِ</div>`:''}
+    <div class="quran-text">${renderAyahsHtml(sec.ayahs)}</div>
+  </div>
+
+  <div class="card mem-tracker">
+    <div class="mem-stage-label">${isW?'Final Review — Full Section':`Part ${si+1} of ${ts-1}`}</div>
+    <div class="mem-section-label">${sec.label}</div>
+    <div class="counter-display">
+      <span class="counter-number" id="cNum">${app.repetitionCount}</span>
+      <span class="counter-total">/ ${app.targetReps}</span>
+    </div>
+    <div class="progress-bar-container">
+      <div class="progress-bar-fill" id="pBar" style="width:${app.repetitionCount/app.targetReps*100}%"></div>
+    </div>
+    <div class="progress-info">
+      <span id="pD">${app.repetitionCount} repetitions</span>
+      <span id="pL">${app.targetReps-app.repetitionCount} remaining</span>
+    </div>
+    <button class="counter-btn" id="repBtn">I've Read It — Tap to Count</button>
+    <button class="skip-complete-btn" id="skipBtn">✓ Complete This Section</button>
+    <div class="audio-player-mini" style="margin-top:14px;">
+      <button class="play-btn" id="saBtn">${ICONS.play}</button>
+      <div class="audio-info">Play this section<small>Listen while memorizing</small></div>
+    </div>
+    ${vrHtml()}
+    <div class="reset-row"><button class="reset-btn" id="rcBtn">Reset Counter</button></div>
+  </div>`;
+
+  // Counter button
+  $('#repBtn').addEventListener('click',()=>{
+    app.repetitionCount++;
+    const c=$('#cNum'),b=$('#pBar'),d=$('#pD'),l=$('#pL');
+    if(c){c.textContent=app.repetitionCount;c.classList.add('pulse');setTimeout(()=>c.classList.remove('pulse'),300);}
+    if(b)b.style.width=app.repetitionCount/app.targetReps*100+'%';
+    if(d)d.textContent=app.repetitionCount+' repetitions';
+    if(l)l.textContent=Math.max(0,app.targetReps-app.repetitionCount)+' remaining';
+    autoSaveSession();
+    if(app.repetitionCount>=app.targetReps)handleSectionComplete();
+  });
+
+  // Section audio player
+  let sq=sec.ayahs.map(a=>a.audio),si2=0,sa=new Audio(),sp=false;
+  function psa(){if(si2>=sq.length){sp=false;si2=0;const b=$('#saBtn');if(b)b.innerHTML=ICONS.play;return;}sa.src=sq[si2];sa.play().catch(()=>{});sa.onended=()=>{si2++;psa();};}
+  $('#saBtn').addEventListener('click',()=>{
+    if(sp){sa.pause();sp=false;const b=$('#saBtn');if(b)b.innerHTML=ICONS.play;}
+    else{sp=true;const b=$('#saBtn');if(b)b.innerHTML=ICONS.pause;psa();}
+  });
+
+  // NEW: Skip / Complete section button
+  $('#skipBtn').addEventListener('click',()=>{
+    sa.pause();
+    handleSectionComplete();
+  });
+
+  $('#rcBtn').addEventListener('click',()=>{if(confirm('Reset counter?')){app.repetitionCount=0;autoSaveSession();renderMemorize();}});
+  $('#backBtn').addEventListener('click',()=>{sa.pause();resetVR();autoSaveSession();app.memScreen=false;renderChecklist();});
+
+  // NEW: Voice recorder setup
+  setupVR();
+}
+
+/* ══════════════════════════════════════════════════
+   Section / page completion
+══════════════════════════════════════════════════ */
 function handleSectionComplete(){
   app.sectionCompleted[app.currentSectionIndex]=true;autoSaveSession();
   if(app.sectionCompleted.every(Boolean)){
-    if(app.currentSegmentIndex<app.surahSegments.length-1){showOverlay('🌟','Section Complete!','Moving to next surah section.','Continue',()=>{app.currentSegmentIndex++;app.checkTranslation=false;app.listenCount=0;renderChecklist();});}
-    else{markPageComplete(app.pageNumber);clearSavedSession();app.memScreen=false;showOverlay('🏆','ما شاء الله!',`Page ${app.pageNumber} memorized! May Allah keep it firm in your heart.`,'Memorize Another',()=>{showBottomNav(true);renderHome();},'Repeat Page',()=>{app.currentSegmentIndex=0;app.checkTranslation=false;app.listenCount=0;if(app.surahSegments.length>1)renderSegmentPicker();else renderChecklist();});}
+    if(app.currentSegmentIndex<app.surahSegments.length-1){
+      showOverlay('🌟','Section Complete!','Moving to next surah section.','Continue',()=>{
+        app.currentSegmentIndex++;app.checkTranslation=false;app.listenCount=0;resetVR();renderChecklist();
+      });
+    }else{
+      markPageComplete(app.pageNumber);clearSavedSession();app.memScreen=false;
+      showOverlay('🏆','ما شاء الله!',`Page ${app.pageNumber} memorized! May Allah keep it firm in your heart.`,
+        'Memorize Another',()=>{resetVR();showBottomNav(true);renderHome();},
+        'Repeat Page',()=>{resetVR();app.currentSegmentIndex=0;app.checkTranslation=false;app.listenCount=0;if(app.surahSegments.length>1)renderSegmentPicker();else renderChecklist();}
+      );
+    }
     return;
   }
-  const nx=app.sectionCompleted.findIndex((c,i)=>!c);if(nx!==-1){app.currentSectionIndex=nx;app.repetitionCount=0;renderMemorize();}
+  const nx=app.sectionCompleted.findIndex((c,i)=>!c);
+  if(nx!==-1){app.currentSectionIndex=nx;app.repetitionCount=0;renderMemorize();}
 }
 
-function markPageComplete(pn){const t=todayStr();data.completedPages[pn]={completedAt:t,lastReviewed:t,reviewStage:0,nextReview:getNextReviewDate(0,t)};updateStreak();saveData();updateReviewBadge();}
+function markPageComplete(pn){
+  const t=todayStr();
+  data.completedPages[pn]={completedAt:t,lastReviewed:t,reviewStage:0,nextReview:getNextReviewDate(0,t)};
+  updateStreak();saveData();updateReviewBadge();
+}
 
-function showOverlay(em,ti,msg,b1t,b1f,b2t,b2f){const o=document.createElement('div');o.className='celebration-overlay';o.innerHTML=`<div class="celebration-card"><div class="trophy">${em}</div><h2>${ti}</h2><p>${msg}</p><button class="btn btn-primary btn-full" id="ov1" style="margin-bottom:8px;">${b1t}</button>${b2t?`<button class="btn btn-outline btn-full" id="ov2">${b2t}</button>`:''}</div>`;document.body.appendChild(o);o.querySelector('#ov1').addEventListener('click',()=>{o.remove();b1f();});if(b2t)o.querySelector('#ov2').addEventListener('click',()=>{o.remove();b2f();});}
+function showOverlay(em,ti,msg,b1t,b1f,b2t,b2f){
+  const o=document.createElement('div');o.className='celebration-overlay';
+  o.innerHTML=`<div class="celebration-card"><div class="trophy">${em}</div><h2>${ti}</h2><p>${msg}</p>
+  <button class="btn btn-primary btn-full" id="ov1" style="margin-bottom:8px;">${b1t}</button>
+  ${b2t?`<button class="btn btn-outline btn-full" id="ov2">${b2t}</button>`:''}</div>`;
+  document.body.appendChild(o);
+  o.querySelector('#ov1').addEventListener('click',()=>{o.remove();b1f();});
+  if(b2t)o.querySelector('#ov2').addEventListener('click',()=>{o.remove();b2f();});
+}
 
+/* ══════════════════════════════════════════════════
+   Review tab
+══════════════════════════════════════════════════ */
 function renderReview(){
+  resetVR();
   const due=getDueReviews();updateReviewBadge();
-  if(!due.length){$main().innerHTML=`<div class="card"><div class="card-title"><div class="icon">📋</div> Revision Queue</div><div class="empty-state"><svg viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/></svg><p>No reviews due!</p><small>Pages will appear here on schedule.</small></div></div><div class="info-box"><div style="min-width:18px;">${ICONS.eye}</div><p>Schedule: 1d → 3d → 7d → 14d → 30d → 3 months → every 3 months permanently.</p></div>`;return;}
-  $main().innerHTML=`<div class="card"><div class="card-title"><div class="icon">📋</div> Revision — ${due.length} Due</div><p style="font-size:0.82rem;color:var(--gray-500);margin-bottom:14px;line-height:1.5;">Recite from memory, then reveal to check. Pass if fewer than 3 errors.</p><div id="rl"></div></div>`;
-  const rl=$('#rl');due.forEach(it=>{const d=document.createElement('div');d.className='surah-segment-card';const st=it.reviewStage,lb=st<REVIEW_STAGES.length?`Review #${st+1}`:'Recurring (3 months)';d.innerHTML=`<h4>Page ${it.page}</h4><p>${lb}</p>`;d.addEventListener('click',()=>startReview(it.page));rl.appendChild(d);});
-}
-
-async function startReview(pn){
-  showBottomNav(false);$main().innerHTML='<div style="display:flex;flex-direction:column;align-items:center;padding:60px 0;gap:14px;"><div class="spinner"></div><span style="font-size:0.85rem;color:var(--emerald-600);">Loading…</span></div>';
-  try{const ay=await fetchPage(pn);renderReviewPage(pn,ay);}catch{showBottomNav(true);renderReview();}
-}
-
-function renderReviewPage(pn,ay){
-  const th=renderAyahsHtml(ay);let rev=false;
-  $main().innerHTML=`<button class="back-btn" id="bk">${ICONS.back} Review Queue</button>
-  <div class="review-card"><div class="card-title"><div class="icon">📋</div> Reviewing Page ${pn}</div>
-  <p style="font-size:0.84rem;color:var(--gray-600);margin-bottom:16px;line-height:1.5;">Recite this page from memory first, then tap below to reveal and check yourself.</p>
-  <div id="tArea"><div class="text-hidden-overlay" id="revBtn"><div class="reveal-text">${ICONS.eye}<p>Tap to reveal text</p><small>Recite from memory first</small></div></div></div>
-  <div id="rActs" style="display:none;" class="review-actions">
-    <button class="btn btn-sm" id="passBtn" style="flex:1;background:var(--emerald-600);color:white;">✓ &lt; 3 errors</button>
-    <button class="btn btn-outline btn-sm" id="failBtn" style="flex:1;border-color:#fbbf24;color:#92400e;">✗ Needs practice</button>
-  </div></div>`;
-  $('#revBtn').addEventListener('click',()=>{if(rev)return;rev=true;$('#tArea').innerHTML=`<div class="quran-text-container" style="margin:0;"><div class="quran-text">${th}</div></div>`;$('#rActs').style.display='flex';});
-  $('#bk').addEventListener('click',()=>{showBottomNav(true);renderReview();});
-  document.addEventListener('click',function h(e){
-    if(e.target.id==='passBtn'||e.target.closest('#passBtn')){document.removeEventListener('click',h);passReview(pn);}
-    if(e.target.id==='failBtn'||e.target.closest('#failBtn')){document.removeEventListener('click',h);failReview(pn);}
+  if(!due.length){
+    $main().innerHTML=`<div class="card"><div class="card-title"><div class="icon">📋</div> Revision Queue</div>
+    <div class="empty-state"><svg viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/></svg>
+    <p>No reviews due!</p><small>Pages will appear here on schedule.</small></div></div>
+    <div class="info-box"><div style="min-width:18px;">${ICONS.eye}</div><p>Schedule: 1d → 3d → 7d → 14d → 30d → 3 months → every 3 months permanently.</p></div>`;
+    return;
+  }
+  $main().innerHTML=`<div class="card"><div class="card-title"><div class="icon">📋</div> Revision — ${due.length} Due</div>
+  <p style="font-size:0.82rem;color:var(--gray-500);margin-bottom:14px;line-height:1.5;">Recite from memory, then reveal to check. Pass if fewer than 3 errors.</p>
+  <div id="rl"></div></div>`;
+  const rl=$('#rl');
+  due.forEach(it=>{
+    const d=document.createElement('div');d.className='surah-segment-card';
+    const st=it.reviewStage,lb=st<REVIEW_STAGES.length?`Review #${st+1}`:'Recurring (3 months)';
+    d.innerHTML=`<h4>Page ${it.page}</h4><p>${lb}</p>`;
+    d.addEventListener('click',()=>startReview(it.page));
+    rl.appendChild(d);
   });
 }
 
-function passReview(pn){const i=data.completedPages[pn];if(!i)return;const t=todayStr();i.reviewStage++;i.lastReviewed=t;i.nextReview=getNextReviewDate(i.reviewStage,t);saveData();const nxt=i.reviewStage<REVIEW_STAGES.length?REVIEW_STAGES[i.reviewStage]+' days':'3 months';showOverlay('✅','Review Passed!',`Page ${pn} — next review in ${nxt}.`,'Continue',()=>{showBottomNav(true);renderReview();});}
-function failReview(pn){const i=data.completedPages[pn];if(!i)return;const t=todayStr();i.lastReviewed=t;const tm=new Date();tm.setDate(tm.getDate()+1);i.nextReview=tm.toISOString().split('T')[0];saveData();showOverlay('🔄','Keep Practicing',`Page ${pn} will come back tomorrow.`,'Continue',()=>{showBottomNav(true);renderReview();});}
+async function startReview(pn){
+  showBottomNav(false);
+  $main().innerHTML='<div style="display:flex;flex-direction:column;align-items:center;padding:60px 0;gap:14px;"><div class="spinner"></div><span style="font-size:0.85rem;color:var(--emerald-600);">Loading…</span></div>';
+  try{const ay=await fetchPage(pn);renderReviewPage(pn,ay);}
+  catch{showBottomNav(true);renderReview();}
+}
 
+/* ══════════════════════════════════════════════════
+   Review page (updated with voice recorder)
+══════════════════════════════════════════════════ */
+function renderReviewPage(pn,ay){
+  const th=renderAyahsHtml(ay);let rev=false;
+  $main().innerHTML=`<button class="back-btn" id="bk">${ICONS.back} Review Queue</button>
+  <div class="review-card">
+    <div class="card-title"><div class="icon">📋</div> Reviewing Page ${pn}</div>
+    <p style="font-size:0.84rem;color:var(--gray-600);margin-bottom:14px;line-height:1.5;">
+      Recite this page from memory first. Use the voice recorder below to record yourself, then reveal to compare.
+    </p>
+    ${vrHtml()}
+    <div id="tArea" style="margin-top:14px;">
+      <div class="text-hidden-overlay" id="revBtn">
+        <div class="reveal-text">${ICONS.eye}<p>Tap to reveal text</p><small>Recite from memory first</small></div>
+      </div>
+    </div>
+    <div id="rActs" style="display:none;" class="review-actions">
+      <button class="btn btn-sm" id="passBtn" style="flex:1;background:var(--emerald-600);color:white;">✓ &lt; 3 errors</button>
+      <button class="btn btn-outline btn-sm" id="failBtn" style="flex:1;border-color:#fbbf24;color:#92400e;">✗ Needs practice</button>
+    </div>
+  </div>`;
+
+  // Voice recorder setup
+  setupVR();
+
+  $('#revBtn').addEventListener('click',()=>{
+    if(rev)return;rev=true;
+    $('#tArea').innerHTML=`<div class="quran-text-container" style="margin:0;"><div class="quran-text">${th}</div></div>`;
+    $('#rActs').style.display='flex';
+  });
+  $('#bk').addEventListener('click',()=>{resetVR();showBottomNav(true);renderReview();});
+
+  document.addEventListener('click',function h(e){
+    if(e.target.id==='passBtn'||e.target.closest('#passBtn')){document.removeEventListener('click',h);resetVR();passReview(pn);}
+    if(e.target.id==='failBtn'||e.target.closest('#failBtn')){document.removeEventListener('click',h);resetVR();failReview(pn);}
+  });
+}
+
+function passReview(pn){
+  const i=data.completedPages[pn];if(!i)return;
+  const t=todayStr();i.reviewStage++;i.lastReviewed=t;i.nextReview=getNextReviewDate(i.reviewStage,t);saveData();
+  const nxt=i.reviewStage<REVIEW_STAGES.length?REVIEW_STAGES[i.reviewStage]+' days':'3 months';
+  showOverlay('✅','Review Passed!',`Page ${pn} — next review in ${nxt}.`,'Continue',()=>{showBottomNav(true);renderReview();});
+}
+function failReview(pn){
+  const i=data.completedPages[pn];if(!i)return;
+  const t=todayStr();i.lastReviewed=t;
+  const tm=new Date();tm.setDate(tm.getDate()+1);i.nextReview=tm.toISOString().split('T')[0];saveData();
+  showOverlay('🔄','Keep Practicing',`Page ${pn} will come back tomorrow.`,'Continue',()=>{showBottomNav(true);renderReview();});
+}
+
+/* ══════════════════════════════════════════════════
+   Progress tab
+══════════════════════════════════════════════════ */
 function renderProgress(){
   let vm='grid';
   function render(){
     const cc=getCompletedCount(),pct=(cc/604*100).toFixed(1);
-    let h=`<div class="card"><div class="card-title"><div class="icon">📊</div> Your Progress</div><div style="text-align:center;margin-bottom:16px;"><div style="font-size:2.2rem;font-weight:800;color:var(--emerald-700);">${cc}</div><div style="font-size:0.82rem;color:var(--gray-500);font-weight:500;">of 604 pages (${pct}%)</div><div class="progress-bar-container" style="margin-top:10px;"><div class="progress-bar-fill" style="width:${pct}%"></div></div></div>
-    <div class="progress-tabs"><button class="progress-tab ${vm==='grid'?'active':''}" data-v="grid">Grid</button><button class="progress-tab ${vm==='juz'?'active':''}" data-v="juz">By Juz</button><button class="progress-tab ${vm==='surah'?'active':''}" data-v="surah">By Surah</button></div><div id="pv"></div></div>`;
+    let h=`<div class="card"><div class="card-title"><div class="icon">📊</div> Your Progress</div>
+    <div style="text-align:center;margin-bottom:16px;">
+      <div style="font-size:2.2rem;font-weight:800;color:var(--emerald-700);">${cc}</div>
+      <div style="font-size:0.82rem;color:var(--gray-500);font-weight:500;">of 604 pages (${pct}%)</div>
+      <div class="progress-bar-container" style="margin-top:10px;"><div class="progress-bar-fill" style="width:${pct}%"></div></div>
+    </div>
+    <div class="progress-tabs">
+      <button class="progress-tab ${vm==='grid'?'active':''}" data-v="grid">Grid</button>
+      <button class="progress-tab ${vm==='juz'?'active':''}" data-v="juz">By Juz</button>
+      <button class="progress-tab ${vm==='surah'?'active':''}" data-v="surah">By Surah</button>
+    </div><div id="pv"></div></div>`;
     $main().innerHTML=h;
     document.querySelectorAll('.progress-tab').forEach(t=>t.addEventListener('click',()=>{vm=t.dataset.v;render();}));
     if(vm==='grid')rGrid();else if(vm==='juz')rJuz();else rSurah();
@@ -852,17 +1359,29 @@ function renderProgress(){
   render();
 }
 
+/* ══════════════════════════════════════════════════
+   Settings tab
+══════════════════════════════════════════════════ */
 function renderSettings(){
   $main().innerHTML=`
-  <div class="card"><div class="card-title"><div class="icon">🎧</div> Default Reciter</div><select class="reciter-select" id="rSel">${RECITERS.map(r=>`<option value="${r.id}" ${r.id===data.reciterId?'selected':''}>${r.name}</option>`).join('')}</select></div>
-  <div class="card"><div class="card-title"><div class="icon">🎯</div> Weekly Goal</div><div class="goal-input-row"><input type="number" id="gIn" value="${data.weeklyGoal}" min="1" max="50"><span>pages per week</span><button class="btn btn-secondary btn-xs" id="gSave">Save</button></div></div>
-  <div class="card"><div class="card-title"><div class="icon">💾</div> Data</div><p style="font-size:0.82rem;color:var(--gray-500);margin-bottom:12px;font-weight:500;">Progress is saved locally in this browser.</p><button class="btn btn-outline btn-full btn-sm" id="expBtn" style="margin-bottom:8px;">Export Progress (JSON)</button><button class="btn btn-sm btn-full" id="clrBtn" style="background:var(--red-50);color:var(--red-800);border:1px solid var(--red-200);">Reset All Progress</button></div>`;
+  <div class="card"><div class="card-title"><div class="icon">🎧</div> Default Reciter</div>
+  <select class="reciter-select" id="rSel">${RECITERS.map(r=>`<option value="${r.id}" ${r.id===data.reciterId?'selected':''}>${r.name}</option>`).join('')}</select></div>
+  <div class="card"><div class="card-title"><div class="icon">🎯</div> Weekly Goal</div>
+  <div class="goal-input-row"><input type="number" id="gIn" value="${data.weeklyGoal}" min="1" max="50"><span>pages per week</span><button class="btn btn-secondary btn-xs" id="gSave">Save</button></div></div>
+  <div class="card"><div class="card-title"><div class="icon">💾</div> Data</div>
+  <p style="font-size:0.82rem;color:var(--gray-500);margin-bottom:12px;font-weight:500;">Progress is saved locally in this browser.</p>
+  <button class="btn btn-outline btn-full btn-sm" id="expBtn" style="margin-bottom:8px;">Export Progress (JSON)</button>
+  <button class="btn btn-sm btn-full" id="clrBtn" style="background:var(--red-50);color:var(--red-800);border:1px solid var(--red-200);">Reset All Progress</button></div>`;
+
   $('#rSel').addEventListener('change',e=>{data.reciterId=e.target.value;saveData();});
   $('#gSave').addEventListener('click',()=>{const v=parseInt($('#gIn').value);if(v&&v>0){data.weeklyGoal=v;saveData();renderSettings();}});
   $('#expBtn').addEventListener('click',()=>{const b=new Blob([JSON.stringify(data,null,2)],{type:'application/json'}),a=document.createElement('a');a.href=URL.createObjectURL(b);a.download=`tarteel-${todayStr()}.json`;a.click();});
   $('#clrBtn').addEventListener('click',()=>{if(confirm('Delete ALL progress? This cannot be undone.')){if(confirm('Really delete everything?')){data=defaultData();saveData();renderSettings();}}});
 }
 
+/* ══════════════════════════════════════════════════
+   Init
+══════════════════════════════════════════════════ */
 initNav();renderHome();
 window.addEventListener('beforeunload',()=>{if(app.memScreen)autoSaveSession();});
 </script>
